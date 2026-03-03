@@ -1,4 +1,4 @@
-CREATE TABLE urls (
+CREATE TABLE if not exists urls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     original_url TEXT NOT NULL,
     short_code TEXT NOT NULL UNIQUE,
@@ -6,13 +6,14 @@ CREATE TABLE urls (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE USERS (
+
+CREATE TABLE if not exists USERS (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL
 );
 
-CREATE TABLE user_urls (
+CREATE TABLE if not exists user_urls (
     user_id INTEGER NOT NULL,
     url_id INTEGER NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

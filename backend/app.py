@@ -19,14 +19,13 @@ SHORTCODE_LENGTH = 3
 
 
 def initialize_db():
-    if not os.path.exists(DB_PATH):
-        with sqlite3.connect(DB_PATH) as conn:
-            with open('db/schema.sql', 'r') as f:
-                conn.executescript(f.read())
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    with sqlite3.connect(DB_PATH) as c:
+        with open('db/schema.sql', 'r') as f:
+            c.executescript(f.read())
 
 
-
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+initialize_db()
 
 conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 conn.row_factory = sqlite3.Row
@@ -308,6 +307,5 @@ def delete_url(shortcode):
 
 
 if __name__ == '__main__':
-    initialize_db()
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
 
