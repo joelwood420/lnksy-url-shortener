@@ -3,6 +3,7 @@ CREATE TABLE if not exists urls (
     original_url TEXT NOT NULL,
     short_code TEXT NOT NULL UNIQUE,
     click_count INTEGER NOT NULL DEFAULT 0,
+    title TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

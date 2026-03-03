@@ -6,10 +6,11 @@ import sqlite3
 import qrcode
 import io
 import base64
+from bs4 import BeautifulSoup
 from user_auth import create_user, get_user_by_email, hash_password, check_password
 
 app = Flask(__name__, static_folder='../url-short/dist', static_url_path='')
-app.secret_key = os.urandom(24)
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
 
@@ -50,10 +51,10 @@ def is_shortcode_unique(generated_shortcode):
 
 
 
-def save_url(url, shortcode, user_id=None):
+def save_url(url, shortcode, user_id=None, title=None):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO urls (original_url, short_code) VALUES (?, ?)", (url, shortcode))
+    cursor.execute("INSERT INTO urls (original_url, short_code, title) VALUES (?, ?, ?)", (url, shortcode, title))
     if user_id:
         url_id = cursor.lastrowid
         cursor.execute("INSERT INTO user_urls (user_id, url_id) VALUES (?, ?)", (user_id, url_id))
@@ -91,6 +92,19 @@ def is_valid_url(url):
         return response.status_code < 500
     except requests.exceptions.RequestException:
         return False
+
+
+def get_page_title(url):
+    user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+    try:
+        response = requests.get(url, timeout=5, headers=user_agent)
+        if response.status_code != 200:
+            return None
+        soup = BeautifulSoup(response.text, 'html.parser')
+        title_tag = soup.find('title')
+        return title_tag.string.strip() if title_tag and title_tag.string else None
+    except Exception:
+        return None
 
 
 def get_logged_in_user():
@@ -155,6 +169,14 @@ def login():
     return jsonify({"message": "Login successful", "email": email}), 200
 
 
+@app.route('/me', methods=['GET'])
+def me():
+    email = session.get('email')
+    if not email:
+        return jsonify({"email": None}), 200
+    return jsonify({"email": email}), 200
+
+
 @app.route('/logout', methods=['POST'])
 def logout():
     session.pop('email', None)
@@ -177,25 +199,21 @@ def shorten_url():
 
     user = get_logged_in_user()
 
-    existing_shortcode = get_shortcode_for_url(original_url)
-
-    if existing_shortcode:
-        if user:
-            short_url = f"{request.host_url}{user[0]}/{existing_shortcode}"
-        else:
+    if not user:
+        existing_shortcode = get_shortcode_for_url(original_url)
+        if existing_shortcode:
             short_url = create_short_url(existing_shortcode)
-        qr_code = generate_qr_code(short_url)
-        print(f"Short URL: {short_url}")
-        response = jsonify({"short_url": short_url, "qr_code": qr_code})
-        return response, 200
-        
-        
+            qr_code = generate_qr_code(short_url)
+            print(f"Short URL: {short_url}")
+            return jsonify({"short_url": short_url, "qr_code": qr_code}), 200
+
     while True:
         shortcode = generate_shortcode()
         if is_shortcode_unique(shortcode):
             break
 
-    save_url(original_url, shortcode, user[0] if user else None)
+    title = get_page_title(original_url)
+    save_url(original_url, shortcode, user[0] if user else None, title)
     if user:
         short_url = f"{request.host_url}{user[0]}/{shortcode}"
     else:
@@ -234,6 +252,7 @@ def handle_redirect(shortcode):
     
     original_url = get_url_by_shortcode(shortcode)
     if original_url:
+        increment_click_count(shortcode)
         return redirect(original_url)
     else:
         return jsonify({"error": "Shortcode not found"}), 404
@@ -250,14 +269,14 @@ def my_urls():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT urls.original_url, urls.short_code, urls.click_count 
+        SELECT urls.original_url, urls.short_code, urls.click_count, urls.title
         FROM urls 
         JOIN user_urls ON urls.id = user_urls.url_id 
         WHERE user_urls.user_id = ?
     """, (user[0],))
     urls = cursor.fetchall()
 
-    url_list = [{"original_url": row["original_url"], "short_code": row["short_code"], "click_count": row["click_count"]} for row in urls]
+    url_list = [{"original_url": row["original_url"], "short_code": row["short_code"], "click_count": row["click_count"], "title": row["title"]} for row in urls]
     return jsonify({"user_id": user[0], "urls": url_list}), 200
 
 

@@ -11,6 +11,18 @@ function App() {
   const myUrlsRef = useRef(null)
 
   useEffect(() => {
+    // Check if user is already logged in on page load
+    fetch('/me', { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => {
+        if (data.email) {
+          setCurrentUser(data.email)
+        }
+      })
+      .catch(err => console.error('Session check failed:', err))
+  }, [])
+
+  useEffect(() => {
     if (showMyUrls && myUrlsRef.current) {
       if (window.innerWidth < 768) {
         setTimeout(() => {

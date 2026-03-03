@@ -149,7 +149,7 @@ function MyUrls() {
                                 <div className="myurls-content">
                                     <div className="myurls-top">
                                         <div className="myurls-original" title={item.original_url}>
-                                            {item.original_url}
+                                            {item.title || item.original_url}
                                         </div>
                                         <span className="myurls-clicks" title="Click count">
                                             🔭 {item.click_count}
