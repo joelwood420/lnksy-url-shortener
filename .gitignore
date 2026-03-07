@@ -9,6 +9,7 @@ venv/
 env/
 .venv/
 ENV/
+backend/venv/
 
 # Distribution / packaging
 build/
@@ -25,6 +26,7 @@ htmlcov/
 # SQLite databases
 *.db
 backend/db/
+backend/tests/db/
 tests/db/
 /db/
 
