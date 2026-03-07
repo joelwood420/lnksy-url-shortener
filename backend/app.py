@@ -3,15 +3,20 @@ from dotenv import load_dotenv
 import requests
 import random
 import os
-import sqlite3
 import qrcode
 import io
 import base64
+import ipaddress
+from urllib.parse import urlparse
+import socket
 from bs4 import BeautifulSoup
+from db import get_db_connection, initialize_db, close_db, DB_PATH
 from user_auth import create_user, get_user_by_email, hash_password, check_password
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, '.env'))
+
+GOOGLE_SAFE_BROWSING_API_KEY = os.environ.get('GOOGLE_SAFE_BROWSING_API_KEY')
 
 _docker_static = os.path.join(BASE_DIR, 'url-short', 'dist')
 _local_static = os.path.normpath(os.path.join(BASE_DIR, '..', 'url-short', 'dist'))
@@ -19,38 +24,18 @@ STATIC_DIR = _docker_static if os.path.isdir(_docker_static) else _local_static
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.secret_key = os.environ.get('secret_key')
+if not app.secret_key:
+    raise RuntimeError("secret_key environment variable is not set. Add it to backend/.env")
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-
-
-DB_PATH = os.path.join(BASE_DIR, 'db', 'urls.db')
-CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-SHORTCODE_LENGTH = 3
-
-
-def initialize_db():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    with open(os.path.join(BASE_DIR, 'schema.sql'), 'r') as f:
-        conn.executescript(f.read())
-    conn.close()
 
 
 initialize_db()
 
-#fresh connection per request to prevent mutable state between threads
-def get_db_connection():
-    if 'db' not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-    return g.db
+app.teardown_appcontext(close_db)
 
-#closes db after each request to prevent mutable state between threads
-@app.teardown_appcontext
-def close_db(exception):
-    db = g.pop('db', None)
-    if db is not None:
-        db.close()
+CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+SHORTCODE_LENGTH = 3
+
 
 def generate_shortcode():
         return "".join(random.choice(CHARS) for _ in range(SHORTCODE_LENGTH))
@@ -113,21 +98,68 @@ def create_short_url(shortcode):
     return f"{request.host_url}{shortcode}"
 
 
-def is_valid_url(url):
-    user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-    if not url.startswith(('http://', 'https://')):
-        url = 'https://' + url
+def is_safe_url(url):
     try:
-        response = requests.get(url, timeout=5, headers=user_agent, allow_redirects=True)
+        hostname = urlparse(url).hostname
+        if not hostname:
+            return False
+        resolved_ip = socket.gethostbyname(hostname)
+        ip = ipaddress.ip_address(resolved_ip)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return False
+        return True
+    except Exception:
+        return False
+
+
+USER_AGENT = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+
+SAFE_BROWSING_THREAT_TYPES = [
+    "MALWARE",
+    "SOCIAL_ENGINEERING",
+    "UNWANTED_SOFTWARE",
+    "POTENTIALLY_HARMFUL_APPLICATION",
+]
+
+def is_safe_browsing_url(url):
+    """Return False if Google Safe Browsing flags the URL as a known threat."""
+    if not GOOGLE_SAFE_BROWSING_API_KEY:
+        return True  
+    try:
+        resp = requests.post(
+            "https://safebrowsing.googleapis.com/v4/threatMatches:find",
+            params={"key": GOOGLE_SAFE_BROWSING_API_KEY},
+            json={
+                "client": {"clientId": "url-shortener", "clientVersion": "1.0"},
+                "threatInfo": {
+                    "threatTypes": SAFE_BROWSING_THREAT_TYPES,
+                    "platformTypes": ["ANY_PLATFORM"],
+                    "threatEntryTypes": ["URL"],
+                    "threatEntries": [{"url": url}],
+                },
+            },
+            timeout=5,
+        )
+        return resp.status_code != 200 or resp.json() == {}
+    except requests.exceptions.RequestException:
+        return True  
+
+
+def is_valid_url(url):
+    if not is_safe_url(url):
+        return False
+    if not is_safe_browsing_url(url):
+        return False
+    try:
+        response = requests.get(url, timeout=5, headers=USER_AGENT, allow_redirects=True)
         return response.status_code < 500
     except requests.exceptions.RequestException:
         return False
 
 
 def get_page_title(url):
-    user_agent = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
     try:
-        response = requests.get(url, timeout=5, headers=user_agent)
+        response = requests.get(url, timeout=5, headers=USER_AGENT)
         if response.status_code != 200:
             return None
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -171,6 +203,9 @@ def register():
 
     if not email or not password:
         return jsonify({"error": "Email and password are required"}), 400
+
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
 
     if get_user_by_email(email):
         return jsonify({"error": "Email already registered"}), 409

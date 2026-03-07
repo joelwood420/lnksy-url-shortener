@@ -1,18 +1,11 @@
-import sqlite3
 import bcrypt
-import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-
-def get_connection():
-    import app as app_module
-    return app_module.get_db_connection()
+from db import get_db_connection
 
 
 def execute_query(query, params=(), fetchone=False, commit=False):
-    conn = get_connection()
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(query, params)
     result = None
