@@ -1,4 +1,5 @@
-from flask import Flask, redirect, request, jsonify, send_from_directory, session
+from flask import Flask, redirect, request, jsonify, send_from_directory, session, g
+from dotenv import load_dotenv
 import requests
 import random
 import os
@@ -10,6 +11,7 @@ from bs4 import BeautifulSoup
 from user_auth import create_user, get_user_by_email, hash_password, check_password
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 _docker_static = os.path.join(BASE_DIR, 'url-short', 'dist')
 _local_static = os.path.normpath(os.path.join(BASE_DIR, '..', 'url-short', 'dist'))
@@ -27,18 +29,28 @@ SHORTCODE_LENGTH = 3
 
 def initialize_db():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    with sqlite3.connect(DB_PATH) as c:
-        with open(os.path.join(BASE_DIR, 'schema.sql'), 'r') as f:
-            c.executescript(f.read())
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    with open(os.path.join(BASE_DIR, 'schema.sql'), 'r') as f:
+        conn.executescript(f.read())
+    conn.close()
 
 
 initialize_db()
 
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-conn.row_factory = sqlite3.Row
-
+#fresh connection per request to prevent mutable state between threads
 def get_db_connection():
-    return conn
+    if 'db' not in g:
+        g.db = sqlite3.connect(DB_PATH)
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+#closes db after each request to prevent mutable state between threads
+@app.teardown_appcontext
+def close_db(exception):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
 
 def generate_shortcode():
         return "".join(random.choice(CHARS) for _ in range(SHORTCODE_LENGTH))
@@ -236,7 +248,6 @@ def shorten_url():
 @app.route('/assets/<path:filename>')
 def serve_assets(filename):
     return send_from_directory(os.path.join(app.static_folder, 'assets'), filename)
-
 
 
 

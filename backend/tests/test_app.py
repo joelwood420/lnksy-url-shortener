@@ -20,7 +20,7 @@ def test_existing_shortcode(test_db):
 
 
 
-def test_shorten_url(client, test_db):
+def test_shorten_url(client):
     response = client.post('/shorten', json={"url": "youtube.com"})
     assert response.status_code == 201
 
@@ -39,7 +39,7 @@ def test_shorten_url(client, test_db):
     assert result["original_url"] == "https://youtube.com"
 
 
-def test_register_user(client, test_db):
+def test_register_user(client):
     response = client.post('/register', json={"email": "testuser@test.com", "password": "testpass"})
     assert response.status_code == 201
 
@@ -49,7 +49,7 @@ def test_register_user(client, test_db):
     assert data["message"] == "User created successfully"
 
 
-def test_login_user(client, test_db):
+def test_login_user(client):
     client.post('/register', json={"email": "testuser@test.com", "password": "testpass"})
     response = client.post('/login', json={"email": "testuser@test.com", "password": "testpass"})
     assert response.status_code == 200
@@ -59,7 +59,7 @@ def test_login_user(client, test_db):
     assert "message" in data
     assert data["message"] == "Login successful"
 
-def test_logout_user(client, test_db):
+def test_logout_user(client):
     client.post('/register', json={"email": "testuser@test.com", "password": "testpass"})
     client.post('/login', json={"email": "testuser@test.com", "password": "testpass"})
     response = client.post('/logout')
@@ -71,7 +71,7 @@ def test_logout_user(client, test_db):
     assert data["message"] == "Logged out"
 
 
-def test_redirect(client, test_db):
+def test_redirect(client):
     shorten_response = client.post('/shorten', json={"url": "youtube.com"})
     short_url = shorten_response.get_json()["short_url"]
     shortcode = short_url.split("/")[-1]
@@ -98,6 +98,34 @@ def test_missing_url(client, test_db):
     assert data is not None
     assert "error" in data
     assert data["error"] == "No URL provided"
+
+
+def test_handle_user_redirect_success(client, test_db):
+   
+    client.post('/register', json={"email": "testuser@test.com", "password": "testpass"})
+    client.post('/login', json={"email": "testuser@test.com", "password": "testpass"})
+
+    shorten_response = client.post('/shorten', json={"url": "youtube.com"})
+    assert shorten_response.status_code == 201
+
+    short_url = shorten_response.get_json()["short_url"]
+    
+    parts = short_url.rstrip("/").split("/")
+    user_id, shortcode = parts[-2], parts[-1]
+
+    response = client.get(f'/{user_id}/{shortcode}')
+    assert response.status_code == 302
+    assert response.headers['Location'] == "https://youtube.com"
+
+
+def test_handle_user_redirect_not_found(client, test_db):
+    response = client.get('/1/zzz')
+    assert response.status_code == 404
+
+    data = response.get_json()
+    assert data is not None
+    assert "error" in data
+    assert data["error"] == "Shortcode not found"
 
 
 

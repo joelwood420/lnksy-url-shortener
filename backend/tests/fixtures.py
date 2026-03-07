@@ -14,10 +14,13 @@ def test_db():
     conn.row_factory = sqlite3.Row
     with open(schema_path, 'r') as f:
         conn.executescript(f.read())
-    import app as app_module
-    app_module.conn = conn
-    app_module.app.secret_key = 'test-secret-key'
-    yield conn
+    app.secret_key = 'test-secret-key'
+
+    with app.app_context():
+        from flask import g
+        g.db = conn
+        yield conn
+
     conn.close()
 
 @pytest.fixture

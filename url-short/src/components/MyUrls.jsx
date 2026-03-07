@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import "./MyUrls.css";
+import { getMyUrls, deleteUrl, getQrCode } from "../api";
 
 function MyUrls() {
     const [urls, setUrls] = useState([]);
@@ -12,22 +13,15 @@ function MyUrls() {
 
     const fetchUrls = async () => {
         try {
-            const response = await fetch("/my-urls", {
-                credentials: "include",
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setUserId(data.user_id);
-                setUrls(data.urls);
-            } else if (response.status === 401) {
+            const data = await getMyUrls();
+            setUserId(data.user_id);
+            setUrls(data.urls);
+        } catch (err) {
+            if (err.status === 401) {
                 setNotLoggedIn(true);
             } else {
-                setError("Failed to load URLs");
+                setError(err.message || "Could not load your URLs");
             }
-        } catch (err) {
-            console.error("Error:", err);
-            setError("Could not load your URLs");
         } finally {
             setLoading(false);
         }
@@ -57,12 +51,9 @@ function MyUrls() {
         }
 
         try {
-            const response = await fetch(`/qr/${shortCode}`);
-            if (response.ok) {
-                const data = await response.json();
-                setQrData(prev => ({ ...prev, [shortCode]: data.qr_code }));
-                setVisibleQr(shortCode);
-            }
+            const qr = await getQrCode(shortCode);
+            setQrData(prev => ({ ...prev, [shortCode]: qr }));
+            setVisibleQr(shortCode);
         } catch (err) {
             console.error("Failed to load QR code:", err);
         }
@@ -99,22 +90,14 @@ function MyUrls() {
 
     const handleDeleteUrl = async (shortCode) => {
         try {
-            const response = await fetch(`/delete/${shortCode}`, {
-                method: 'DELETE',
-                credentials: 'include',
+            await deleteUrl(shortCode);
+            setUrls(prevUrls => prevUrls.filter(url => url.short_code !== shortCode));
+            setQrData(prev => {
+                const { [shortCode]: _, ...rest } = prev;
+                return rest;
             });
-
-            if (response.ok) {
-                setUrls(prevUrls => prevUrls.filter(url => url.short_code !== shortCode));
-                setQrData(prev => {
-                    const { [shortCode]: _, ...rest } = prev;
-                    return rest;
-                });
-            } else {
-                console.error('Failed to delete URL');
-            }
         } catch (err) {
-            console.error('Error deleting URL:', err);
+            console.error("Error deleting URL:", err);
         }
     };
 
