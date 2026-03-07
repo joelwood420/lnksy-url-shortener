@@ -33,12 +33,11 @@ A full-stack URL shortener with user accounts, click tracking, and QR code gener
 
 ## Screenshots
 
-> _Add screenshots here — drag images into this file on GitHub, or drop them in a `/screenshots` folder and reference them below._
+![web main](screenshots/hero.png)
 
-```
-![Hero / shorten form](screenshots/hero.png)
-![My Links dashboard](screenshots/my-links.png)
-```
+![mobile landing page](screenshots/mobile.png)
+
+![Mobile results](screenshots/mobile-2.png)
 
 ---
 

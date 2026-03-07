@@ -84,6 +84,18 @@ def get_shortcode_for_url(url):
     return result['short_code'] if result else None
 
 
+def get_shortcode_for_user_url(url, user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT urls.short_code FROM urls
+        JOIN user_urls ON urls.id = user_urls.url_id
+        WHERE urls.original_url = ? AND user_urls.user_id = ?
+    """, (url, user_id))
+    result = cursor.fetchone()
+    return result['short_code'] if result else None
+
+
 def get_url_by_shortcode(shortcode):
     result = execute_query("SELECT original_url FROM urls WHERE short_code = ?", (shortcode,))
     return result['original_url'] if result else None
@@ -217,12 +229,17 @@ def shorten_url():
 
     user = get_logged_in_user()
 
-    if not user:
+    if user:
+        existing_shortcode = get_shortcode_for_user_url(original_url, user[0])
+        if existing_shortcode:
+            short_url = f"{request.host_url}{user[0]}/{existing_shortcode}"
+            qr_code = generate_qr_code(short_url)
+            return jsonify({"short_url": short_url, "qr_code": qr_code}), 200
+    else:
         existing_shortcode = get_shortcode_for_url(original_url)
         if existing_shortcode:
             short_url = create_short_url(existing_shortcode)
             qr_code = generate_qr_code(short_url)
-            print(f"Short URL: {short_url}")
             return jsonify({"short_url": short_url, "qr_code": qr_code}), 200
 
     while True:

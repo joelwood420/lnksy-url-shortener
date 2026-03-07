@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Hero from './components/Hero'
 import MyUrls from './components/MyUrls'
-import Create_User from './components/Create_User'
+import Create_User from './components/CreateUser'
 import './App.css'
 
 function App() {

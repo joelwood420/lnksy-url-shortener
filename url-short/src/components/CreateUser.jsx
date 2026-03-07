@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import "./Create_User.css";
+import "./CreateUser.css";
 
-function Create_User({ onClose, onLoginSuccess }) {
+function CreateUser({ onClose, onLoginSuccess }) {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
@@ -144,4 +144,4 @@ function Create_User({ onClose, onLoginSuccess }) {
     );
 }
 
-export default Create_User;
+export default CreateUser;
