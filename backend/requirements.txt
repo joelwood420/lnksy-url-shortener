@@ -1,6 +1,7 @@
 flask
 flask-cors
 flask-limiter
+flask-talisman
 requests
 bcrypt
 qrcode[pil]

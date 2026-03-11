@@ -2,7 +2,7 @@
 
 A full-stack URL shortener with user accounts, click tracking, and QR code generation.
 
-🔗 **Live app:** [lnksy.fly.dev](https://lnksy.fly.dev)
+🔗 **Live app:** [lnksy.site](https://lnksy.site)
 
 ---
 

@@ -9,6 +9,7 @@ import base64
 from db import get_db_connection, initialize_db, close_db, DB_PATH, execute_query
 from user_auth import create_user, get_user_by_email, hash_password, check_password
 from flask_limiter import Limiter
+from flask_talisman import Talisman
 from url_validation import validate_url_and_get_title
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -22,10 +23,30 @@ app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
 app.secret_key = os.environ.get('SECRET_KEY')
 if not app.secret_key:
     raise RuntimeError("SECRET_KEY environment variable is not set. Add it to backend/.env")
+if len(app.secret_key) < 32:
+    raise RuntimeError(
+        f"SECRET_KEY is too short ({len(app.secret_key)} chars). "
+        "It must be at least 32 characters. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 app.config['SESSION_COOKIE_HTTPONLY'] = True   
 app.config['SESSION_COOKIE_SECURE'] = True     
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+Talisman(
+    app,
+    content_security_policy={
+        'default-src': ["'self'"],
+        'script-src': ["'self'", "'unsafe-inline'"],   # React needs inline scripts
+        'style-src': ["'self'", "'unsafe-inline'"],
+        'img-src': ["'self'", "data:"],
+        'connect-src': ["'self'"],
+    },
+    force_https=False,          # handled by the reverse proxy / Fly.io
+    frame_options='DENY',       # X-Frame-Options: DENY  (clickjacking)
+    referrer_policy='strict-origin-when-cross-origin',
+)
 
 limiter = Limiter(app, default_limits=["100 per day", "10 per minute"])
 
