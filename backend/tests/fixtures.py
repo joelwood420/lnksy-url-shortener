@@ -15,6 +15,9 @@ def test_db():
     with open(schema_path, 'r') as f:
         conn.executescript(f.read())
     app.secret_key = 'test-secret-key'
+    app.config['TESTING'] = True
+    app.config['WTF_CSRF_ENABLED'] = False
+    app.config['RATELIMIT_ENABLED'] = False
 
     with app.app_context():
         from flask import g
@@ -25,6 +28,8 @@ def test_db():
 
 @pytest.fixture
 def client(test_db):
+    app.config['TESTING'] = True
+    app.config['WTF_CSRF_ENABLED'] = False
     with app.test_client() as client:
         yield client
 

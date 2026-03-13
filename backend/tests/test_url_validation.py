@@ -29,9 +29,9 @@ def test_is_safe_url_rejects_no_hostname():
 
 def test_validate_url_invalid_host():
     """A URL whose hostname resolves to a private/invalid IP fails validation."""
-    valid, title, reason = url_validation.validate_url_and_get_title("http://192.168.1.1")
-    assert valid is False
-    assert reason == "invalid_url"
+    result = url_validation.validate_url_and_get_title("http://192.168.1.1")
+    assert result.valid is False
+    assert result.error_reason == "invalid_url"
 
 
 def test_validate_url_returns_title(mocker):
@@ -44,10 +44,10 @@ def test_validate_url_returns_title(mocker):
     mock_response.text = "<html><head><title>Example Domain</title></head></html>"
     mocker.patch("url_validation.requests.get", return_value=mock_response)
 
-    valid, title, reason = url_validation.validate_url_and_get_title("https://example.com")
-    assert valid is True
-    assert title == "Example Domain"
-    assert reason is None
+    result = url_validation.validate_url_and_get_title("https://example.com")
+    assert result.valid is True
+    assert result.title == "Example Domain"
+    assert result.error_reason is None
 
 
 def test_validate_url_blocks_dangerous_url(mocker):
@@ -55,9 +55,9 @@ def test_validate_url_blocks_dangerous_url(mocker):
     mocker.patch("url_validation.is_safe_url", return_value="1.2.3.4")
     mocker.patch("url_validation.is_safe_browsing_url", return_value="dangerous")
 
-    valid, title, reason = url_validation.validate_url_and_get_title("https://malware.example.com")
-    assert valid is False
-    assert reason == "dangerous"
+    result = url_validation.validate_url_and_get_title("https://malware.example.com")
+    assert result.valid is False
+    assert result.error_reason == "dangerous"
 
 
 
@@ -72,7 +72,7 @@ def test_validate_url_server_error(mocker):
     mock_response.status_code = 500
     mocker.patch("url_validation.requests.get", return_value=mock_response)
 
-    valid, title, reason = url_validation.validate_url_and_get_title("https://example.com")
-    assert valid is False
-    assert reason == "invalid_url"
+    result = url_validation.validate_url_and_get_title("https://example.com")
+    assert result.valid is False
+    assert result.error_reason == "invalid_url"
 

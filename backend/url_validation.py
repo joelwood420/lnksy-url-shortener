@@ -4,6 +4,14 @@ import requests
 import os
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
+from dataclasses import dataclass
+
+
+@dataclass
+class UrlCheckResult:
+    valid: bool
+    title: str | None
+    error_reason: str | None 
 
 GOOGLE_SAFE_BROWSING_API_KEY = os.environ.get('GOOGLE_SAFE_BROWSING_API_KEY')
 
@@ -62,13 +70,13 @@ def is_safe_browsing_url(url):
 def validate_url_and_get_title(url):
     resolved_ip = is_safe_url(url)
     if not resolved_ip:
-        return False, None, "invalid_url"
+        return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
 
     safe_browsing_result = is_safe_browsing_url(url)
     if safe_browsing_result == "dangerous":
-        return False, None, "dangerous"
+        return UrlCheckResult(valid=False, title=None, error_reason="dangerous")
     if safe_browsing_result == "unavailable":
-        return False, None, "service_unavailable"
+        return UrlCheckResult(valid=False, title=None, error_reason="service_unavailable")
 
     try:
         parsed = urlparse(url)
@@ -90,16 +98,16 @@ def validate_url_and_get_title(url):
         if response.is_redirect:
             redirect_url = response.headers.get('Location', '')
             if not is_safe_url(redirect_url):
-                return False, None, "invalid_url"
-            return True, None, None
+                return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
+            return UrlCheckResult(valid=True, title=None, error_reason=None)
 
         if response.status_code >= 500:
-            return False, None, "invalid_url"
+            return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
 
         soup = BeautifulSoup(response.text, 'html.parser')
         title_tag = soup.find('title')
         title = title_tag.string.strip() if title_tag and title_tag.string else None
-        return True, title, None
+        return UrlCheckResult(valid=True, title=title, error_reason=None)
 
     except requests.exceptions.RequestException:
-        return False, None, "invalid_url"
+        return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")

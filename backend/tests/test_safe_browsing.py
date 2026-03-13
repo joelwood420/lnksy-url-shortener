@@ -85,7 +85,7 @@ def test_validate_url_rejects_flagged_url(mocker):
     )
     mock_get = mocker.patch("url_validation.requests.get")
 
-    valid, _, reason = url_validation.validate_url_and_get_title("https://phishing.example.com/login")
-    assert valid is False
-    assert reason == "dangerous"
+    result = url_validation.validate_url_and_get_title("https://phishing.example.com/login")
+    assert result.valid is False
+    assert result.error_reason == "dangerous"
     mock_get.assert_not_called()

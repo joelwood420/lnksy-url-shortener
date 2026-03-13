@@ -5,6 +5,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backend.tests.fixtures import client, test_db
 import app
+from url_validation import UrlCheckResult
 
 
 def test_generate_shortcode():
@@ -21,7 +22,7 @@ def test_existing_shortcode(test_db):
 
 
 def test_shorten_url(client, mocker):
-    mocker.patch("app.validate_url_and_get_title", return_value=(True, "YouTube", None))
+    mocker.patch("app.validate_url_and_get_title", return_value=UrlCheckResult(valid=True, title="YouTube", error_reason=None))
     response = client.post('/shorten', json={"url": "youtube.com"})
     assert response.status_code == 201
 
@@ -73,7 +74,7 @@ def test_logout_user(client):
 
 
 def test_redirect(client, mocker):
-    mocker.patch("app.validate_url_and_get_title", return_value=(True, "YouTube", None))
+    mocker.patch("app.validate_url_and_get_title", return_value=UrlCheckResult(valid=True, title="YouTube", error_reason=None))
     shorten_response = client.post('/shorten', json={"url": "youtube.com"})
     short_url = shorten_response.get_json()["short_url"]
     shortcode = short_url.split("/")[-1]
@@ -103,7 +104,7 @@ def test_missing_url(client, test_db):
 
 
 def test_handle_user_redirect_success(client, test_db, mocker):
-    mocker.patch("app.validate_url_and_get_title", return_value=(True, "YouTube", None))
+    mocker.patch("app.validate_url_and_get_title", return_value=UrlCheckResult(valid=True, title="YouTube", error_reason=None))
     client.post('/register', json={"email": "testuser@test.com", "password": "testpass"})
     client.post('/login', json={"email": "testuser@test.com", "password": "testpass"})
 

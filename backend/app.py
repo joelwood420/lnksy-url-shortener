@@ -238,11 +238,11 @@ def shorten_url():
     if not original_url.startswith(('http://', 'https://')):
         original_url = 'https://' + original_url
 
-    valid, title, error_reason = validate_url_and_get_title(original_url)
-    if not valid:
-        if error_reason == "dangerous":
+    result = validate_url_and_get_title(original_url)
+    if not result.valid:
+        if result.error_reason == "dangerous":
             return jsonify({"error": "This URL has been flagged as dangerous"}), 400
-        if error_reason == "service_unavailable":
+        if result.error_reason == "service_unavailable":
             return jsonify({"error": "URL safety check is unavailable, please try again later"}), 503
         return jsonify({"error": "Please input a valid URL"}), 400
 
@@ -263,7 +263,7 @@ def shorten_url():
     while True:
         shortcode = generate_shortcode()
         try:
-            save_url(original_url, shortcode, user[0] if user else None, custom_title or title)
+            save_url(original_url, shortcode, user[0] if user else None, custom_title or result.title)
             break
         except sqlite3.IntegrityError:
             continue
