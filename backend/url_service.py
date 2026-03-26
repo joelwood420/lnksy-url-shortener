@@ -20,7 +20,6 @@ _SHORTCODE_LENGTH = 5
 
 @dataclass(frozen=True)
 class ShortenedUrl:
-    """Everything a caller needs after shortening a URL."""
     short_url: str
     qr_code_base64: str
     is_new: bool
@@ -28,7 +27,6 @@ class ShortenedUrl:
 
 @dataclass(frozen=True)
 class UrlEntry:
-    """A single URL row suitable for display in "My URLs"."""
     original_url: str
     short_code: str
     click_count: int
@@ -41,14 +39,12 @@ def _generate_shortcode() -> str:
 
 
 def _build_short_url(shortcode: str, user_id: Optional[int] = None) -> str:
-    """Construct the full short URL, including user-id prefix when applicable."""
     if user_id is not None:
         return f"{request.host_url}{user_id}/{shortcode}"
     return f"{request.host_url}{shortcode}"
 
 
 def _generate_qr_code(short_url: str) -> str:
-    """Return a base-64 encoded PNG QR code for *short_url*."""
     qr = qrcode.QRCode(version=1, box_size=12, border=5)
     qr.add_data(short_url)
     qr.make(fit=True)
@@ -60,18 +56,12 @@ def _generate_qr_code(short_url: str) -> str:
 
 
 def _normalise_url(url: str) -> str:
-    """Ensure the URL starts with a scheme."""
     if not url.startswith(("http://", "https://")):
         return "https://" + url
     return url
 
 
 def _find_existing_shortcode(url: str, user_id: Optional[int]) -> Optional[str]:
-    """Return an existing shortcode for *url*, or ``None``.
-
-    When a *user_id* is supplied the lookup is scoped to that user's URLs;
-    otherwise the global table is searched.
-    """
     if user_id is not None:
         row = execute_query(
             """
@@ -92,7 +82,6 @@ def _find_existing_shortcode(url: str, user_id: Optional[int]) -> Optional[str]:
 
 
 def _save_url(url: str, shortcode: str, user_id: Optional[int], title: Optional[str]) -> None:
-    """Persist a new shortened URL inside a single transaction."""
     with transaction() as conn:
         cursor = conn.execute(
             "INSERT INTO urls (original_url, short_code, title) VALUES (?, ?, ?)",
@@ -201,7 +190,6 @@ def delete_url(shortcode: str, user_id: int) -> bool:
 
 
 def qr_code_for(shortcode: str) -> Optional[str]:
-    """Return a base-64 QR PNG for *shortcode*, or ``None`` if not found."""
     if resolve(shortcode) is None:
         return None
     short_url = _build_short_url(shortcode)

@@ -1,11 +1,3 @@
-"""Flask application — thin routing layer.
-
-Following Ousterhout's philosophy, this module is deliberately *shallow*:
-it handles HTTP concerns (request parsing, response building, status codes)
-and delegates all business logic to the deep modules ``url_service`` and
-``user_auth``.  No raw SQL, no password hashing, no QR generation lives here.
-"""
-
 from flask import Flask, redirect, request, jsonify, send_from_directory, session
 from flask_wtf.csrf import generate_csrf
 from flask_wtf import CSRFProtect
