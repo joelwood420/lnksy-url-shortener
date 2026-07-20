@@ -3,7 +3,7 @@ import ipaddress
 import requests
 import os
 from enum import Enum
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 
@@ -25,6 +25,8 @@ GOOGLE_SAFE_BROWSING_API_KEY = os.environ.get('GOOGLE_SAFE_BROWSING_API_KEY')
 USER_AGENT = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
+
+MAX_REDIRECT_HOPS = 5
 
 SAFE_BROWSING_THREAT_TYPES = [
     "MALWARE",
@@ -74,39 +76,61 @@ def is_safe_browsing_url(url):
         return SafeBrowsingStatus.UNAVAILABLE
 
 
-def validate_url_and_get_title(url):
-    resolved_ip = is_safe_url(url)
-    if not resolved_ip:
-        return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
+def _fetch_with_pinned_dns(url, resolved_ip):
+    """Fetch ``url`` with DNS pinned to ``resolved_ip``, without following redirects.
 
-    safe_browsing_result = is_safe_browsing_url(url)
-    if safe_browsing_result == SafeBrowsingStatus.DANGEROUS:
-        return UrlCheckResult(valid=False, title=None, error_reason="dangerous")
-    if safe_browsing_result == SafeBrowsingStatus.UNAVAILABLE:
-        return UrlCheckResult(valid=False, title=None, error_reason="service_unavailable")
+    Pinning matters because validating a hostname and then fetching it are two
+    separate lookups.  Without it, a host that answered with a harmless public
+    address during validation can answer with a loopback address a moment later.
+    """
+    hostname = urlparse(url).hostname
+    original_getaddrinfo = socket.getaddrinfo
 
+    def pinned_getaddrinfo(host, *args, **kwargs):
+        if host == hostname:
+            return original_getaddrinfo(resolved_ip, *args, **kwargs)
+        return original_getaddrinfo(host, *args, **kwargs)
+
+    socket.getaddrinfo = pinned_getaddrinfo
     try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname
+        return requests.get(url, timeout=3, headers=USER_AGENT, allow_redirects=False)
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
 
-        original_getaddrinfo = socket.getaddrinfo
 
-        def pinned_getaddrinfo(host, *args, **kwargs):
-            if host == hostname:
-                return original_getaddrinfo(resolved_ip, *args, **kwargs)
-            return original_getaddrinfo(host, *args, **kwargs)
+def validate_url_and_get_title(url):
+    """Walk the redirect chain, checking every hop, and return the final page title.
 
-        socket.getaddrinfo = pinned_getaddrinfo
+    Each hop is checked twice: that it does not resolve to an internal address,
+    and that Safe Browsing does not flag it.  Checking only the submitted URL is
+    not enough, because a clean redirector can forward to a flagged destination.
+    """
+    current_url = url
+
+    for _ in range(MAX_REDIRECT_HOPS + 1):
+        resolved_ip = is_safe_url(current_url)
+        if not resolved_ip:
+            return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
+
+        safe_browsing_result = is_safe_browsing_url(current_url)
+        if safe_browsing_result == SafeBrowsingStatus.DANGEROUS:
+            return UrlCheckResult(valid=False, title=None, error_reason="dangerous")
+        if safe_browsing_result == SafeBrowsingStatus.UNAVAILABLE:
+            return UrlCheckResult(valid=False, title=None, error_reason="service_unavailable")
+
         try:
-            response = requests.get(url, timeout=3, headers=USER_AGENT, allow_redirects=False)
-        finally:
-            socket.getaddrinfo = original_getaddrinfo
+            response = _fetch_with_pinned_dns(current_url, resolved_ip)
+        except requests.exceptions.RequestException:
+            return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
 
         if response.is_redirect:
-            redirect_url = response.headers.get('Location', '')
-            if not is_safe_url(redirect_url):
+            location = response.headers.get('Location', '')
+            if not location:
                 return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
-            return UrlCheckResult(valid=True, title=None, error_reason=None)
+            # Location is allowed to be relative, so resolve it against the URL
+            # we just fetched rather than treating it as absolute.
+            current_url = urljoin(current_url, location)
+            continue
 
         if response.status_code >= 500:
             return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
@@ -116,5 +140,5 @@ def validate_url_and_get_title(url):
         title = title_tag.string.strip() if title_tag and title_tag.string else None
         return UrlCheckResult(valid=True, title=title, error_reason=None)
 
-    except requests.exceptions.RequestException:
-        return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
+    # A chain longer than this is either a loop or deliberately evasive.
+    return UrlCheckResult(valid=False, title=None, error_reason="invalid_url")
